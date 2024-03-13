@@ -1,0 +1,168 @@
+using System;
+using UnityEngine;
+
+public class HoverEngine : MonoBehaviour
+{
+    public SimpleVRLever leftLever;
+    public SimpleVRLever rightLever;
+    [SerializeField] double leftLeverValue;
+    [SerializeField] double rightLeverValue;
+
+    Rigidbody rb;
+
+    [Header("Power Variables")]
+    [SerializeField] float engineRevTime = 0.1f;
+    [SerializeField] float upForce = 2;
+    [SerializeField] float engineThrust;
+    [SerializeField] bool thrustOff;
+
+    [Header("Raycasting Properties")]
+    RaycastHit hit;
+    [SerializeField] float rayLength = 10;
+    [SerializeField] float maxHeight = 10;
+    [SerializeField] float maxGroundDistance;
+    [SerializeField] LayerMask groundLayer;
+
+    [Header("Engine State")]
+    [SerializeField] engineState state;
+
+    [Header("Ship Rotation")]
+    [SerializeField] float MinMaxAngle = 10;
+
+    float initialLeftAngle;
+    float initialRightAngle;
+
+    void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+
+        // Store initial lever angles
+        initialLeftAngle = leftLever.currentAngle;
+        initialRightAngle = rightLever.currentAngle;
+
+        // Invoke Mono.Cecil-based modification here
+        ModifyScript();
+    }
+
+    private void Update()
+    {
+        leftLeverValue = leftLever.currentAngle;
+        rightLeverValue = rightLever.currentAngle;
+
+        switch (state)
+        {
+            case engineState.on:
+                enginePower();
+                driveMode();
+                break;
+            case engineState.off:
+                enginePower();
+                break;
+        }
+    }
+
+    void enginePower()
+    {
+        if (Physics.Raycast(transform.position, -transform.up, out hit, rayLength, groundLayer))
+        {
+            Debug.DrawRay(transform.position, transform.forward * hit.distance, Color.red);
+        }
+    }
+
+    private void FixedUpdate()
+    {
+        if (Physics.Raycast(transform.position, -transform.up, out hit, maxGroundDistance, groundLayer))
+        {
+            float distanceToGround = hit.distance;
+            float proportionalHeight = (maxHeight - distanceToGround) / maxHeight;
+            Vector3 appliedHoverForce = Vector3.up * proportionalHeight * upForce;
+            rb.AddForce(appliedHoverForce, ForceMode.Acceleration);
+        }
+
+        rotationStablization();
+    }
+
+    void driveMode()
+    {
+        // Calculate turning torque based on lever values
+        float leftLeverAngle = (float)(leftLever.currentAngle - initialLeftAngle) * Mathf.Rad2Deg;
+        float rightLeverAngle = (float)(rightLever.currentAngle - initialRightAngle) * Mathf.Rad2Deg;
+        float turningTorque = 0f;
+
+        // Check if levers are in default position
+        if (Mathf.Approximately(leftLeverAngle, 0f) && Mathf.Approximately(rightLeverAngle, 0f))
+        {
+            // Apply braking force or reduce velocity
+            rb.velocity *= 0.95f; // Reduce velocity by 5% each FixedUpdate
+        }
+        else
+        {
+            if (!thrustOff)
+            {
+                // Check which lever is more forward
+                if (Mathf.Abs(leftLeverAngle) > Mathf.Abs(rightLeverAngle))
+                {
+                    // Apply turning torque based on the left lever angle
+                    turningTorque = leftLeverAngle;
+                }
+                else
+                {
+                    // Apply turning torque based on the right lever angle
+                    turningTorque = -rightLeverAngle;
+                }
+            }
+
+            // Apply turning torque
+            rb.AddTorque(transform.up * turningTorque);
+
+            // Apply thrust if neither lever is significantly more forward
+            if (Mathf.Abs(leftLeverAngle - rightLeverAngle) < 5f)
+            {
+                rb.AddForce(transform.forward * engineThrust);
+            }
+        }
+    }
+
+    void rotationStablization()
+    {
+        // Get current angles
+        float X = transform.eulerAngles.x;
+        float Y = transform.eulerAngles.y;
+        float Z = transform.eulerAngles.z;
+
+        // Limit angles
+        float clampedX = Mathf.Clamp(X, -MinMaxAngle, MinMaxAngle);
+        float clampedZ = Mathf.Clamp(Z, -MinMaxAngle, MinMaxAngle);
+        float clampedY = Mathf.Clamp(Y, -MinMaxAngle, MinMaxAngle);
+
+        // Apply angles via Quaternion Euler to avoid Gimbal Lock
+        Quaternion stablelize = Quaternion.Euler(clampedX, clampedY, clampedZ);
+        transform.rotation = stablelize;
+    }
+
+    bool floorCondition(float distance, float max, GameObject floor)
+    {
+        return distance < max && floor != null;
+    }
+
+    bool greaterByPercent(double originalVal, double newVal, double percentage)
+    {
+        // Divide the original value by a percentage out of 100%
+        double thresholdCalc = originalVal * (1 + percentage / 100);
+        return newVal > thresholdCalc;
+    }
+
+    enum engineState
+    {
+        on,
+        off
+    }
+
+    void ModifyScript()
+    {
+        // Add your Mono.Cecil code here to dynamically modify the script at runtime
+        Debug.Log("Script modification using Mono.Cecil");
+        // Example: Inject code to compare lever values and adjust ship's behavior
+        // Note: This part requires Mono.Cecil implementation which can't be provided in this text-based interface.
+    }
+}
